@@ -4,16 +4,28 @@
 
 #define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
 
+#define EVERY_N_MILLISECONDS(interval) for (static unsigned long _lastTime = millis(); millis() - _lastTime >= (interval); _lastTime = millis())
+
+
 void setup() {
   Serial.begin(115200);
+  
   wifi_connect();
+  
   homekit_storage_reset();
+  
   my_homekit_setup();
+  
 }
 
 void loop() {
-  my_homekit_loop();
-  delay(10);
+
+  EVERY_N_MILLISECONDS(10) {
+    my_homekit_loop();
+  }
+  
+
+  
 }
 
 //==============================
@@ -31,18 +43,19 @@ static uint32_t next_heap_millis = 0;
 
 // Diese Funktion wird aufgerufen, wenn das Schloss via HomeKit betätigt wird
 void set_lock(const homekit_value_t value) {
+ 
   uint8_t state = value.int_value;
-  cha_lock_current_state.value.int_value = state;
+ 
   if(state == 0){
-    // Schloss wurde via HomeKit geöffnet
     open_lock();
   }
+
+ 
   if(state == 1){
-    // Schloss wurde via HomeKit geschlossen
     close_lock();
   }
-  // HomeKit-Status aktualisieren
-  homekit_characteristic_notify(&cha_lock_current_state, cha_lock_current_state.value);
+  
+  
 }
 
 void my_homekit_setup() {
@@ -55,26 +68,53 @@ void my_homekit_setup() {
 
 
 void my_homekit_loop() {
+  
   arduino_homekit_loop();
-  const uint32_t t = millis();
-  if (t > next_heap_millis) {
-    // heap-Info alle 30 Sekunden im seriellen Monitor ausgeben
-    next_heap_millis = t + 30 * 1000;
-    LOG_D("Free heap: %d, HomeKit clients: %d",
-        ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
 
+  EVERY_N_MILLISECONDS(30000){
+    LOG_D("Free heap: %d, HomeKit clients: %d", ESP.getFreeHeap(), arduino_homekit_connected_clients_count());  
   }
+  
+  
 }
 
 
 
 /* Diese beiden Funktionen werden aufgerufen, wenn das Schloss in HomeKit betätigt wird */
 void open_lock(){
-  Serial.println("Schloss öffnen"); 
-  // hier beliebige Aktion einfügen 
+  // Set Target State
+  cha_lock_target_state.value.int_value = 0;
+  homekit_characteristic_notify(&cha_lock_target_state, cha_lock_target_state.value); 
+
+
+
+  /* ############################################################################################## */
+  /*                     Hier beliebigen Code einfügen, der ein Schloss öffnet                      */
+  /* ############################################################################################## */
+  Serial.println("Schloss öffnen");
+
+  
+
+  // Set Current State
+  cha_lock_current_state.value.int_value = 0;
+  homekit_characteristic_notify(&cha_lock_current_state, cha_lock_current_state.value);
 }
 
 void close_lock(){
+  // Set Target State
+  cha_lock_target_state.value.int_value = 1;
+  homekit_characteristic_notify(&cha_lock_target_state, cha_lock_target_state.value); 
+
+
+
+  /* ############################################################################################## */
+  /*                    Hier beliebigen Code einfügen, der ein Schloss schließt                     */
+  /* ############################################################################################## */
   Serial.println("Schloss schließen");  
-  // hier beliebige Aktion einfügen
+
+
+
+  // Set Current State
+  cha_lock_current_state.value.int_value = 1;
+  homekit_characteristic_notify(&cha_lock_current_state, cha_lock_current_state.value);  
 }
